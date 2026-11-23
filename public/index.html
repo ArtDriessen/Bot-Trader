@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bot Trader</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --txt:#e8eaf0; --mut:#8b93a5; --ok:#2ecc71; --bad:#ff5d5d; --acc:#4f8cff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.4 system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; display:grid; gap:16px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  h1 { font-size:20px; margin:0 0 4px; } h2 { font-size:16px; margin:0 0 12px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:end; }
+  label { display:grid; gap:4px; font-size:12px; color:var(--mut); }
+  input, select, button { background:#0f1115; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; }
+  button { cursor:pointer; background:var(--acc); border:0; font-weight:600; }
+  button.ghost { background:transparent; border:1px solid var(--line); font-weight:400; }
+  button.danger { background:var(--bad); }
+  button:disabled { opacity:.5; cursor:wait; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .mut { color:var(--mut); }
+  .scroll { overflow-x:auto; }
+  #msg { min-height:20px; }
+</style>
+</head>
+<body>
+<main>
+  <div><h1>Bot Trader</h1><div class="mut">Compra a mercado + stop loss nas contas dos clientes</div></div>
+
+  <section id="login">
+    <h2>Acesso</h2>
+    <div class="row">
+      <label>Token do painel<input id="token" type="password" autocomplete="off"></label>
+      <button id="enter">Entrar</button>
+    </div>
+  </section>
+
+  <div id="app" hidden style="display:grid;gap:16px">
+    <section>
+      <h2>Enviar sinal (compra)</h2>
+      <div class="row">
+        <label>Par<input id="pair" placeholder="BTC/USDT" size="12"></label>
+        <label>Entrada<input id="entry" type="number" step="any" size="10"></label>
+        <label>Stop<input id="stop" type="number" step="any" size="10"></label>
+        <button id="send">Executar para todos</button>
+      </div>
+      <div id="msg" class="mut"></div>
+      <div id="result" class="scroll"></div>
+    </section>
+
+    <section>
+      <h2>Clientes</h2>
+      <div class="scroll"><table id="clients"></table></div>
+      <h2 style="margin-top:16px">Adicionar cliente</h2>
+      <div class="row">
+        <label>Nome<input id="c-name"></label>
+        <label>Corretora<select id="c-ex"><option>binance</option><option>bybit</option><option>bingx</option></select></label>
+        <label>Mercado<select id="c-market"><option value="spot">spot</option><option value="futures">futuros</option></select></label>
+        <label>% do saldo<input id="c-pct" type="number" min="1" max="100" value="10" size="5"></label>
+        <label>Alavancagem<input id="c-lev" type="number" min="1" max="125" value="1" size="5"></label>
+        <label>API key<input id="c-key" autocomplete="off"></label>
+        <label>API secret<input id="c-secret" type="password" autocomplete="off"></label>
+        <button id="add">Adicionar</button>
+      </div>
+      <div class="mut" style="margin-top:8px">Use chaves só com permissão de trade (sem saque) e libere o IP do servidor.</div>
+    </section>
+
+    <section>
+      <h2>Últimos sinais</h2>
+      <div id="trades" class="scroll"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let token = sessionStorage.getItem('token') || '';
+
+function el(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+
+async function api(path, method = 'GET', body) {
+  const r = await fetch(path, {
+    method,
+    headers: { 'content-type': 'application/json', 'x-admin-token': token },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401) { sessionStorage.removeItem('token'); location.reload(); }
+  if (!r.ok) throw new Error(data.error || 'Erro');
+  return data;
+}
+
+function resultTable(results) {
+  const t = el('table');
+  const head = el('tr');
+  ['Cliente', 'Corretora', 'Status', 'Detalhes'].forEach((h) => head.append(el('th', h)));
+  t.append(head);
+  results.forEach((r) => {
+    const tr = el('tr');
+    tr.append(el('td', r.clientName), el('td', r.exchange), el('td', r.status, r.ok ? 'ok' : 'bad'));
+    tr.append(el('td', r.error || (r.steps || []).join(' → ')));
+    t.append(tr);
+  });
+  return t;
+}
+
+async function loadClients() {
+  const list = await api('/api/clients');
+  const t = $('clients');
+  t.replaceChildren();
+  const head = el('tr');
+  ['Nome', 'Corretora', 'Mercado', '% saldo', 'Alav.', 'Ativo', ''].forEach((h) => head.append(el('th', h)));
+  t.append(head);
+  list.forEach((c) => {
+    const tr = el('tr');
+    tr.append(el('td', c.name), el('td', c.exchange), el('td', c.market), el('td', c.allocationPct + '%'), el('td', c.market === 'futures' ? c.leverage + 'x' : '-'));
+    const toggle = el('button', c.active ? 'Ativo' : 'Pausado', 'ghost');
+    toggle.onclick = async () => { await api('/api/clients/' + c.id, 'PATCH', { active: !c.active }); loadClients(); };
+    const del = el('button', 'Remover', 'danger');
+    del.onclick = async () => { if (confirm('Remover ' + c.name + '?')) { await api('/api/clients/' + c.id, 'DELETE'); loadClients(); } };
+    const a = el('td'); a.append(toggle); const b = el('td'); b.append(del);
+    tr.append(a, b);
+    t.append(tr);
+  });
+}
+
+async function loadTrades() {
+  const list = await api('/api/trades');
+  const box = $('trades');
+  box.replaceChildren();
+  list.slice(0, 10).forEach((tr) => {
+    const s = tr.signal;
+    box.append(el('div', `${new Date(s.at).toLocaleString('pt-BR')} — ${s.base}/${s.quote} entrada ${s.entry} stop ${s.stop}`, 'mut'));
+    box.append(resultTable(tr.results));
+  });
+}
+
+async function start() {
+  $('login').hidden = true;
+  $('app').hidden = false;
+  try { await loadClients(); await loadTrades(); } catch (e) { $('msg').textContent = e.message; }
+}
+
+$('enter').onclick = () => { token = $('token').value; sessionStorage.setItem('token', token); start(); };
+if (token) start();
+
+$('add').onclick = async () => {
+  try {
+    await api('/api/clients', 'POST', {
+      name: $('c-name').value, exchange: $('c-ex').value, market: $('c-market').value,
+      allocationPct: $('c-pct').value, leverage: $('c-lev').value,
+      apiKey: $('c-key').value, apiSecret: $('c-secret').value,
+    });
+    ['c-name', 'c-key', 'c-secret'].forEach((i) => ($(i).value = ''));
+    loadClients();
+  } catch (e) { alert(e.message); }
+};
+
+$('send').onclick = async () => {
+  const pair = $('pair').value, entry = $('entry').value, stop = $('stop').value;
+  if (!confirm(`Executar COMPRA de ${pair} para todos os clientes ativos?\nEntrada ${entry} | Stop ${stop}`)) return;
+  const btn = $('send'); btn.disabled = true;
+  $('msg').textContent = 'Executando...'; $('result').replaceChildren();
+  try {
+    const data = await api('/api/signal', 'POST', { pair, entry, stop });
+    const okCount = data.results.filter((r) => r.ok).length;
+    $('msg').textContent = `${okCount}/${data.results.length} clientes executados com sucesso`;
+    $('result').append(resultTable(data.results));
+    loadTrades();
+  } catch (e) { $('msg').textContent = e.message; }
+  btn.disabled = false;
+};
+</script>
+</body>
+</html>
