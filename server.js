@@ -1,3 +1,12 @@
+// Carrega o .env se existir (na hospedagem as variáveis vêm do painel)
+try {
+  const fs = require('fs');
+  for (const line of fs.readFileSync(require('path').join(__dirname, '.env'), 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/);
+    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
+  }
+} catch { /* sem .env */ }
+
 const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
