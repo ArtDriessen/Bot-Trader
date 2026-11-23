@@ -4,7 +4,8 @@ const path = require('path');
 const store = require('./lib/store');
 const { encrypt } = require('./lib/crypto');
 const { create, invalidate } = require('./lib/exchange');
-const { executeSignal } = require('./lib/executor');
+const monitor = require('./lib/monitor');
+const { symbolFor } = require('./lib/executor');
 
 const app = express();
 app.use(express.json({ limit: '100kb' }));
@@ -106,28 +107,78 @@ function parsePair(raw) {
   return m ? { base: m[1], quote: m[2] } : null;
 }
 
+// Take profits: [{ price, pct }]. Sem % em nenhum, divide igualmente.
+function parseTakeProfits(raw, entry) {
+  if (!raw || !raw.length) return [];
+  if (!Array.isArray(raw) || raw.length > 5) throw new Error('Informe até 5 take profits');
+  const tps = raw.map((t) => ({
+    price: Number(t.price),
+    pct: t.pct === undefined || t.pct === null || t.pct === '' ? null : Number(t.pct),
+  }));
+  if (tps.some((t) => !(t.price > entry))) throw new Error('Cada take profit precisa ser maior que a entrada');
+  const unset = tps.filter((t) => t.pct === null).length;
+  if (unset === tps.length) tps.forEach((t) => (t.pct = 100 / tps.length));
+  else if (unset) throw new Error('Informe o % de todos os take profits ou de nenhum');
+  if (tps.some((t) => !(t.pct > 0)) || tps.reduce((s, t) => s + t.pct, 0) > 100.0001) {
+    throw new Error('Os % dos take profits precisam ser positivos e somar no máximo 100');
+  }
+  return tps.sort((a, b) => a.price - b.price);
+}
+
 let sending = false;
 
 app.post('/api/signal', auth, async (req, res) => {
   if (sending) return res.status(429).json({ error: 'Já existe um sinal em execução, aguarde' });
-  const pair = parsePair(req.body?.pair);
-  const entry = Number(req.body?.entry);
-  const stop = Number(req.body?.stop);
-  if (!pair) return res.status(400).json({ error: 'Par inválido (ex.: BTC/USDT)' });
-  if (!(entry > 0 && stop > 0)) return res.status(400).json({ error: 'Entrada e stop devem ser números positivos' });
-  if (stop >= entry) return res.status(400).json({ error: 'Para compra, o stop precisa ser menor que a entrada' });
-
-  const active = clients().filter((c) => c.active);
-  if (!active.length) return res.status(400).json({ error: 'Nenhum cliente ativo' });
-
-  sending = true;
   try {
-    const signal = { id: crypto.randomUUID(), ...pair, entry, stop, at: new Date().toISOString() };
-    const results = await executeSignal(active, signal);
-    const trades = store.load('trades.json', []);
-    trades.unshift({ signal, results });
-    store.save('trades.json', trades.slice(0, 500));
-    res.json({ signal, results });
+    const b = req.body || {};
+    const pair = parsePair(b.pair);
+    const entry = Number(b.entry);
+    const stop = Number(b.stop);
+    if (!pair) return res.status(400).json({ error: 'Par inválido (ex.: BTC/USDT)' });
+    if (!(entry > 0 && stop > 0)) return res.status(400).json({ error: 'Entrada e stop devem ser números positivos' });
+    if (stop >= entry) return res.status(400).json({ error: 'Para compra, o stop precisa ser menor que a entrada' });
+
+    const type = ['market', 'limit', 'breakout', 'dip'].includes(b.type) ? b.type : 'market';
+    const stopType = b.stopType === 'limit' ? 'limit' : 'market';
+    const stopLimitOffsetPct = stopType === 'limit' ? Number(b.stopLimitOffsetPct ?? 0.3) : 0;
+    if (stopType === 'limit' && !(stopLimitOffsetPct >= 0.01 && stopLimitOffsetPct <= 5)) {
+      return res.status(400).json({ error: 'Distância do stop-limit deve ficar entre 0,01% e 5%' });
+    }
+    const expireHours = Number(b.expireHours ?? 24);
+    if (!(expireHours >= 0.1 && expireHours <= 720)) return res.status(400).json({ error: 'Validade inválida (0,1 a 720 horas)' });
+    let takeProfits;
+    try {
+      takeProfits = parseTakeProfits(b.takeProfits, entry);
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
+
+    const active = clients().filter((c) => c.active);
+    if (!active.length) return res.status(400).json({ error: 'Nenhum cliente ativo' });
+
+    sending = true;
+    const now = new Date();
+    const signal = {
+      id: crypto.randomUUID(), ...pair, entry, stop, type, stopType, stopLimitOffsetPct, takeProfits,
+      at: now.toISOString(),
+    };
+    const legs = active.map((c) => ({
+      id: crypto.randomUUID(),
+      signalId: signal.id,
+      signal,
+      clientId: c.id,
+      clientName: c.name,
+      exchange: c.exchange,
+      market: c.market,
+      symbol: symbolFor(c, signal),
+      status: 'pendente',
+      steps: [],
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + expireHours * 3600 * 1000).toISOString(),
+    }));
+    await monitor.addSignal(legs);
+    res.json({ signal, legs });
   } catch (e) {
     res.status(500).json({ error: e.message });
   } finally {
@@ -135,7 +186,18 @@ app.post('/api/signal', auth, async (req, res) => {
   }
 });
 
-app.get('/api/trades', auth, (req, res) => res.json(store.load('trades.json', []).slice(0, 50)));
+app.get('/api/legs', auth, (req, res) => res.json(monitor.list(200)));
+
+app.post('/api/signals/:id/cancel', auth, async (req, res) => {
+  try {
+    res.json({ cancelled: await monitor.cancelSignal(req.params.id) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 const port = Number(process.env.PORT || 3000);
-app.listen(port, () => console.log(`Painel em http://localhost:${port}`));
+app.listen(port, () => {
+  console.log(`Painel em http://localhost:${port}`);
+  monitor.start();
+});
