@@ -2,11 +2,14 @@
   "name": "trade-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Robô de execução de sinais (entrada + stop loss) em Binance, Bybit e BingX via API",
+  "description": "Robô que executa calls (entrada + stop) nas corretoras dos usuários (Binance, Bybit, BingX), com cadastro e alvos por usuário",
   "main": "server.js",
-  "engines": { "node": ">=20.6" },
+  "engines": {
+    "node": ">=20.6"
+  },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test/executor.test.js && node test/api.test.js"
   },
   "dependencies": {
     "ccxt": "^4.4.0",

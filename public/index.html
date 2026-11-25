@@ -4,237 +4,104 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bot Trader</title>
-<style>
-  :root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --txt:#e8eaf0; --mut:#8b93a5; --ok:#2ecc71; --bad:#ff5d5d; --acc:#4f8cff; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.4 system-ui, sans-serif; }
-  main { max-width: 980px; margin: 0 auto; padding: 16px; display:grid; gap:16px; }
-  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
-  h1 { font-size:20px; margin:0 0 4px; } h2 { font-size:16px; margin:0 0 12px; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:end; }
-  label { display:grid; gap:4px; font-size:12px; color:var(--mut); }
-  input, select, button { background:#0f1115; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; }
-  button { cursor:pointer; background:var(--acc); border:0; font-weight:600; }
-  button.ghost { background:transparent; border:1px solid var(--line); font-weight:400; }
-  button.danger { background:var(--bad); }
-  button:disabled { opacity:.5; cursor:wait; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  .ok { color:var(--ok); } .bad { color:var(--bad); } .mut { color:var(--mut); }
-  .scroll { overflow-x:auto; }
-  #msg { min-height:20px; margin-top:6px; }
-  #app { display:grid; gap:16px; }
-  [hidden] { display:none !important; }
-  .grp { margin:14px 0 4px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-  .warn { color:#f5b942; }
-</style>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<main>
-  <div><h1>Bot Trader</h1><div class="mut">Compra a mercado + stop loss nas contas dos clientes</div></div>
-
-  <section id="login">
-    <h2>Acesso</h2>
-    <div class="row">
-      <label>Token do painel<input id="token" type="password" autocomplete="off"></label>
-      <button id="enter">Entrar</button>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Bot Trader</h1>
+      <div class="sub">Execução automática das calls na sua corretora</div>
     </div>
+    <div class="who" id="who" hidden>
+      <span id="whoName"></span>
+      <button class="ghost small" id="logout" type="button">Sair</button>
+    </div>
+  </header>
+
+  <!-- Entrar / criar conta -->
+  <section id="authView" class="card narrow" hidden>
+    <div class="tabs">
+      <button type="button" id="tabLogin" class="on">Entrar</button>
+      <button type="button" id="tabReg">Criar conta</button>
+    </div>
+
+    <form id="loginForm" class="form">
+      <label>E-mail<input id="lEmail" type="email" autocomplete="username" required></label>
+      <label>Senha<input id="lPass" type="password" autocomplete="current-password" required></label>
+      <button type="submit">Entrar</button>
+      <div class="msg bad" id="lMsg" role="alert"></div>
+    </form>
+
+    <form id="regForm" class="form" hidden>
+      <label>Nome<input id="rName" type="text" autocomplete="name" required></label>
+      <label>E-mail<input id="rEmail" type="email" autocomplete="username" required></label>
+      <label>Senha (mínimo 10 caracteres)<input id="rPass" type="password" autocomplete="new-password" minlength="10" required></label>
+      <label id="inviteBox" hidden>Código de convite<input id="rInvite" type="text" autocomplete="off"></label>
+      <div class="banner">
+        <b>Aviso importante:</b> o gerenciamento de cada operação é de responsabilidade exclusiva de cada usuário.
+        Operar criptomoedas envolve alto risco e pode causar perda parcial ou total do capital.
+        <b>Não nos responsabilizamos por perdas.</b>
+      </div>
+      <label class="check">
+        <input id="rTerms" type="checkbox" required>
+        <span>Li e aceito os <a href="/termos" target="_blank" rel="noopener">Termos de uso e o aviso de risco</a>, e entendo que o gerenciamento é por minha conta.</span>
+      </label>
+      <button type="submit">Criar conta</button>
+      <div class="msg bad" id="rMsg" role="alert"></div>
+    </form>
   </section>
 
-  <div id="app" hidden>
-    <section>
-      <h2>Enviar sinal (compra)</h2>
-      <div class="row">
-        <label>Par<input id="pair" placeholder="BTC/USDT" size="12"></label>
-        <label>Tipo de entrada
-          <select id="type">
-            <option value="market">A mercado (agora)</option>
-            <option value="limit">Ordem limite</option>
-            <option value="breakout">Rompimento (monitora subir)</option>
-            <option value="dip">Fundo (monitora cair)</option>
-          </select>
-        </label>
-        <label>Entrada<input id="entry" type="number" step="any" size="10"></label>
-        <label>Stop<input id="stop" type="number" step="any" size="10"></label>
-        <label>Tipo de stop
-          <select id="stopType"><option value="market">Stop loss (mercado)</option><option value="limit">Stop limit</option></select>
-        </label>
-        <label id="offsetBox" hidden>Limite abaixo do stop (%)<input id="offset" type="number" step="any" value="0.3" size="6"></label>
-        <label>Take profit (preço:%)<input id="tps" placeholder="105:50, 110:50" size="18"></label>
-        <label>Validade (h)<input id="expire" type="number" step="any" value="24" size="5"></label>
-        <button id="send">Enviar para todos</button>
+  <!-- Área do usuário -->
+  <div id="appView" class="wrap" style="padding:0" hidden>
+    <div class="banner">
+      <b>Aviso importante:</b> o gerenciamento de cada operação é de responsabilidade exclusiva de cada usuário.
+      Operar criptomoedas envolve alto risco e pode causar perda parcial ou total do capital.
+      <b>Não nos responsabilizamos por perdas.</b> <a href="/termos" target="_blank" rel="noopener">Ler os termos</a>
+    </div>
+
+    <section class="card">
+      <h2>Suas contas de corretora</h2>
+      <div class="mut small-text" style="margin-bottom:12px">
+        O robô compra e coloca o stop nos valores de cada call. Aqui você define quanto da sua banca entra em cada trade e onde quer vender.
       </div>
-      <div class="mut" style="margin-top:8px">
-        <b>Rompimento</b> e <b>fundo</b>: o robô monitora o preço e só compra quando ele chegar na entrada (rompimento = entrada acima do preço atual; fundo = abaixo).
-        Se o preço tocar o stop antes, o sinal é cancelado. Take profit: sem %, divide igualmente.
-      </div>
-      <div id="msg" class="mut"></div>
+      <div id="conns"></div>
     </section>
 
-    <section>
-      <h2>Clientes</h2>
-      <div class="scroll"><table id="clients"></table></div>
-      <h2 style="margin-top:16px">Adicionar cliente</h2>
-      <div class="row">
-        <label>Nome<input id="c-name"></label>
-        <label>Corretora<select id="c-ex"><option>binance</option><option>bybit</option><option>bingx</option></select></label>
-        <label>Mercado<select id="c-market"><option value="spot">spot</option><option value="futures">futuros</option></select></label>
-        <label>% do saldo<input id="c-pct" type="number" min="1" max="100" value="10" size="5"></label>
-        <label>Alavancagem<input id="c-lev" type="number" min="1" max="125" value="1" size="5"></label>
-        <label>API key<input id="c-key" autocomplete="off"></label>
-        <label>API secret<input id="c-secret" type="password" autocomplete="off"></label>
-        <button id="add">Adicionar</button>
-      </div>
-      <div class="mut" style="margin-top:8px">Use chaves só com permissão de trade (sem saque) e libere o IP do servidor.</div>
+    <section class="card">
+      <h2>Adicionar conta de corretora</h2>
+      <form id="addForm" class="form">
+        <div class="row">
+          <label>Corretora
+            <select id="aEx"><option value="binance">Binance</option><option value="bybit">Bybit</option><option value="bingx">BingX</option></select>
+          </label>
+          <label>Mercado
+            <select id="aMarket"><option value="spot">Spot</option><option value="futures">Futuros (perpétuos)</option></select>
+          </label>
+          <label id="aLevBox" hidden>Alavancagem (1 a 125)<input id="aLev" type="number" min="1" max="125" step="1" value="1"></label>
+        </div>
+        <div class="row">
+          <label>API key<input id="aKey" type="text" autocomplete="off" spellcheck="false" required></label>
+          <label>API secret<input id="aSecret" type="password" autocomplete="new-password" spellcheck="false" required></label>
+        </div>
+        <div class="slider" id="aAllocBox"></div>
+        <div class="mut small-text">
+          Na corretora, crie a chave com permissão de <b>leitura e trade</b>. <b class="warn">Nunca habilite saque.</b>
+          Se a corretora pedir restrição de IP, libere o IP do servidor. Testamos a chave antes de salvar; ela fica guardada criptografada.
+        </div>
+        <button type="submit">Adicionar conta</button>
+        <div class="msg" id="aMsg" role="alert"></div>
+      </form>
     </section>
 
-    <section>
-      <h2>Operações <span class="mut" style="font-weight:400">(atualiza a cada 5s)</span></h2>
-      <div id="trades" class="scroll"></div>
+    <section class="card">
+      <h2>Suas operações <span class="mut" style="font-weight:400;font-size:13px">(atualiza a cada 5s)</span></h2>
+      <div id="ops"></div>
     </section>
   </div>
-</main>
+</div>
 
-<script>
-const $ = (id) => document.getElementById(id);
-let token = sessionStorage.getItem('token') || '';
-
-function el(tag, text, cls) {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  if (cls) e.className = cls;
-  return e;
-}
-
-async function api(path, method = 'GET', body) {
-  const r = await fetch(path, {
-    method,
-    headers: { 'content-type': 'application/json', 'x-admin-token': token },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await r.json().catch(() => ({}));
-  if (r.status === 401) { sessionStorage.removeItem('token'); location.reload(); }
-  if (!r.ok) throw new Error(data.error || 'Erro');
-  return data;
-}
-
-const LABEL = {
-  monitorando: 'monitorando preço', ordem_aberta: 'ordem limite aberta', ativa: 'ativa (TP monitorado)',
-  concluida: 'protegida', cancelada: 'cancelada', erro: 'erro', pendente: 'pendente',
-  fechada_sem_stop: 'fechada (stop falhou)', exposto_sem_stop: 'SEM STOP - confira!', sem_stop: 'SEM STOP - confira!',
-};
-const cls = (st) => (['concluida', 'ativa'].includes(st) ? 'ok' : ['monitorando', 'ordem_aberta', 'cancelada', 'pendente'].includes(st) ? 'warn' : 'bad');
-
-function legsTable(legs) {
-  const t = el('table');
-  const head = el('tr');
-  ['Cliente', 'Corretora', 'Status', 'Detalhes'].forEach((h) => head.append(el('th', h)));
-  t.append(head);
-  legs.forEach((r) => {
-    const tr = el('tr');
-    tr.append(el('td', r.clientName), el('td', `${r.exchange} ${r.market}`), el('td', LABEL[r.status] || r.status, cls(r.status)));
-    tr.append(el('td', r.error ? r.error : (r.steps || []).slice(-3).join(' → ')));
-    t.append(tr);
-  });
-  return t;
-}
-
-const TYPE = { market: 'mercado', limit: 'limite', breakout: 'rompimento', dip: 'fundo' };
-
-function renderLegs(all) {
-  const box = $('trades');
-  box.replaceChildren();
-  const groups = new Map();
-  all.forEach((l) => { if (!groups.has(l.signalId)) groups.set(l.signalId, []); groups.get(l.signalId).push(l); });
-  [...groups.values()].slice(0, 15).forEach((legs) => {
-    const s = legs[0].signal;
-    const tp = (s.takeProfits || []).map((t) => `${t.price} (${+t.pct.toFixed(1)}%)`).join(', ');
-    const head = el('div', '', 'grp');
-    head.append(el('b', `${s.base}/${s.quote}`), el('span', `${TYPE[s.type]} ${s.entry} | stop ${s.stopType === 'limit' ? 'limit ' : ''}${s.stop}${tp ? ' | TP ' + tp : ''}`, 'mut'));
-    head.append(el('span', new Date(s.at).toLocaleString('pt-BR'), 'mut'));
-    if (legs.some((l) => ['monitorando', 'ordem_aberta'].includes(l.status))) {
-      const b = el('button', 'Cancelar pendentes', 'danger');
-      b.onclick = async () => {
-        if (!confirm('Cancelar o que ainda não foi executado deste sinal?')) return;
-        try { await api('/api/signals/' + s.id + '/cancel', 'POST'); loadLegs(); } catch (e) { alert(e.message); }
-      };
-      head.append(b);
-    }
-    box.append(head, legsTable(legs));
-  });
-  if (!groups.size) box.append(el('div', 'Nenhum sinal enviado ainda.', 'mut'));
-}
-
-async function loadLegs() { renderLegs(await api('/api/legs')); }
-
-async function loadClients() {
-  const list = await api('/api/clients');
-  const t = $('clients');
-  t.replaceChildren();
-  const head = el('tr');
-  ['Nome', 'Corretora', 'Mercado', '% saldo', 'Alav.', 'Ativo', ''].forEach((h) => head.append(el('th', h)));
-  t.append(head);
-  list.forEach((c) => {
-    const tr = el('tr');
-    tr.append(el('td', c.name), el('td', c.exchange), el('td', c.market), el('td', c.allocationPct + '%'), el('td', c.market === 'futures' ? c.leverage + 'x' : '-'));
-    const toggle = el('button', c.active ? 'Ativo' : 'Pausado', 'ghost');
-    toggle.onclick = async () => { await api('/api/clients/' + c.id, 'PATCH', { active: !c.active }); loadClients(); };
-    const del = el('button', 'Remover', 'danger');
-    del.onclick = async () => { if (confirm('Remover ' + c.name + '?')) { await api('/api/clients/' + c.id, 'DELETE'); loadClients(); } };
-    const a = el('td'); a.append(toggle); const b = el('td'); b.append(del);
-    tr.append(a, b);
-    t.append(tr);
-  });
-}
-
-async function start() {
-  $('login').hidden = true;
-  $('app').hidden = false;
-  try { await loadClients(); await loadLegs(); setInterval(() => loadLegs().catch(() => {}), 5000); } catch (e) { $('msg').textContent = e.message; }
-}
-
-$('enter').onclick = () => { token = $('token').value; sessionStorage.setItem('token', token); start(); };
-if (token) start();
-
-$('add').onclick = async () => {
-  try {
-    await api('/api/clients', 'POST', {
-      name: $('c-name').value, exchange: $('c-ex').value, market: $('c-market').value,
-      allocationPct: $('c-pct').value, leverage: $('c-lev').value,
-      apiKey: $('c-key').value, apiSecret: $('c-secret').value,
-    });
-    ['c-name', 'c-key', 'c-secret'].forEach((i) => ($(i).value = ''));
-    loadClients();
-  } catch (e) { alert(e.message); }
-};
-
-$('stopType').onchange = () => { $('offsetBox').hidden = $('stopType').value !== 'limit'; };
-
-function parseTps(text) {
-  return text.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean).map((x) => {
-    const [price, pct] = x.split(':').map((v) => v.trim().replace(',', '.'));
-    return { price, pct: pct === undefined ? undefined : pct.replace('%', '') };
-  });
-}
-
-$('send').onclick = async () => {
-  const body = {
-    pair: $('pair').value, type: $('type').value, entry: $('entry').value, stop: $('stop').value,
-    stopType: $('stopType').value, stopLimitOffsetPct: $('offset').value,
-    takeProfits: parseTps($('tps').value), expireHours: $('expire').value,
-  };
-  const resumo = `${body.type.toUpperCase()} ${body.pair}\nEntrada ${body.entry} | Stop ${body.stop} (${body.stopType})${$('tps').value ? '\nTP: ' + $('tps').value : ''}`;
-  if (!confirm(`Enviar para todos os clientes ativos?\n\n${resumo}`)) return;
-  const btn = $('send'); btn.disabled = true;
-  $('msg').textContent = 'Enviando...';
-  try {
-    const data = await api('/api/signal', 'POST', body);
-    const ok = data.legs.filter((l) => !['erro', 'fechada_sem_stop', 'exposto_sem_stop', 'sem_stop'].includes(l.status)).length;
-    $('msg').textContent = `${ok}/${data.legs.length} clientes aceitos. Veja o andamento em "Operações".`;
-    loadLegs();
-  } catch (e) { $('msg').textContent = e.message; }
-  btn.disabled = false;
-};
-</script>
+<script src="/common.js"></script>
+<script src="/app.js"></script>
 </body>
 </html>

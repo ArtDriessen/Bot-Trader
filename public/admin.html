@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Bot Trader - Admin</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div><h1>Bot Trader <span class="badge">admin</span></h1><div class="sub">Envio das calls e acompanhamento</div></div>
+    <a href="/">Área do usuário</a>
+  </header>
+
+  <section id="login" class="card narrow">
+    <form id="loginForm" class="form">
+      <label>Token de administrador<input id="token" type="password" autocomplete="off" required></label>
+      <button type="submit">Entrar</button>
+      <div class="msg bad" id="lMsg" role="alert"></div>
+    </form>
+  </section>
+
+  <div id="app" class="wrap" style="padding:0" hidden>
+    <section class="card">
+      <h2>Enviar call (compra)</h2>
+      <form id="sigForm" class="form">
+        <div class="row">
+          <label>Par<input id="pair" type="text" placeholder="BTC/USDT" required></label>
+          <label>Tipo de entrada
+            <select id="type">
+              <option value="market">A mercado (agora)</option>
+              <option value="limit">Ordem limite</option>
+              <option value="breakout">Rompimento (monitora subir)</option>
+              <option value="dip">Fundo (monitora cair)</option>
+            </select>
+          </label>
+          <label>Entrada<input id="entry" type="number" step="any" required></label>
+          <label>Stop inicial<input id="stop" type="number" step="any" required></label>
+        </div>
+        <div class="row">
+          <label>Tipo de stop
+            <select id="stopType"><option value="market">Stop loss (mercado)</option><option value="limit">Stop limit</option></select>
+          </label>
+          <label id="offsetBox" hidden>Limite abaixo do stop (%)<input id="offset" type="number" step="any" value="0.3"></label>
+          <label>Validade (horas)<input id="expire" type="number" step="any" value="24"></label>
+          <button type="submit" class="auto">Enviar para todos</button>
+        </div>
+        <div class="mut small-text">
+          Só a <b>entrada</b> e o <b>stop</b> vêm da call. O % da banca e os alvos de venda são os que cada usuário configurou na própria conta.
+          <b>Rompimento</b>/<b>fundo</b>: o robô monitora o preço e só compra quando ele chegar na entrada (rompimento = acima do preço atual; fundo = abaixo).
+        </div>
+        <div class="msg" id="msg"></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Usuários</h2>
+      <div id="users" class="scroll"></div>
+    </section>
+
+    <section class="card">
+      <h2>Operações <span class="mut" style="font-weight:400;font-size:13px">(atualiza a cada 5s)</span></h2>
+      <div id="ops"></div>
+    </section>
+  </div>
+</div>
+<script src="/common.js"></script>
+<script src="/admin.js"></script>
+</body>
+</html>
