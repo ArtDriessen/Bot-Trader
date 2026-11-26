@@ -14,7 +14,8 @@ const store = require('./lib/store');
 const { encrypt } = require('./lib/crypto');
 const { create, invalidate } = require('./lib/exchange');
 const monitor = require('./lib/monitor');
-const { symbolFor } = require('./lib/executor');
+const signals = require('./lib/signals');
+const telegram = require('./lib/telegram');
 const auth = require('./lib/auth');
 
 const TERMS_VERSION = '2026-11-24';
@@ -246,70 +247,18 @@ app.post('/api/me/legs/:id/cancel', requireUser, wrap(async (req, res) => {
 }));
 
 // ---------- Admin: calls (entrada + stop) ----------
-function parsePair(raw) {
-  const s = String(raw || '').toUpperCase().replace(/\s/g, '');
-  let m = s.match(/^([A-Z0-9]{2,15})\/([A-Z]{3,5})$/);
-  if (!m) m = s.match(/^([A-Z0-9]{2,15}?)(USDT|USDC|BUSD)$/);
-  return m ? { base: m[1], quote: m[2] } : null;
-}
-
-let sending = false;
-
 app.post('/api/admin/signal', requireAdmin, wrap(async (req, res) => {
-  if (sending) throw bad('Já existe um sinal em execução, aguarde', 429);
-  const b = req.body || {};
-  const pair = parsePair(b.pair);
-  const entry = Number(b.entry);
-  const stop = Number(b.stop);
-  if (!pair) throw bad('Par inválido (ex.: BTC/USDT)');
-  if (!(entry > 0 && stop > 0)) throw bad('Entrada e stop devem ser números positivos');
-  if (stop >= entry) throw bad('Para compra, o stop precisa ser menor que a entrada');
-
-  const type = ['market', 'limit', 'breakout', 'dip'].includes(b.type) ? b.type : 'market';
-  const stopType = b.stopType === 'limit' ? 'limit' : 'market';
-  const stopLimitOffsetPct = stopType === 'limit' ? Number(b.stopLimitOffsetPct ?? 0.3) : 0;
-  if (stopType === 'limit' && !(stopLimitOffsetPct >= 0.01 && stopLimitOffsetPct <= 5)) {
-    throw bad('Distância do stop-limit deve ficar entre 0,01% e 5%');
-  }
-  const expireHours = Number(b.expireHours ?? 24);
-  if (!(expireHours >= 0.1 && expireHours <= 720)) throw bad('Validade inválida (0,1 a 720 horas)');
-
-  const owners = new Map(users().map((u) => [u.id, u]));
-  const eligible = connections().filter((c) => c.active && c.allocationPct > 0 && owners.has(c.userId) && !owners.get(c.userId).blocked);
-  if (!eligible.length) throw bad('Nenhuma conta ativa com % da banca maior que 0');
-
-  sending = true;
-  try {
-    const now = new Date();
-    // Só entrada e stop vêm da call; os alvos de venda são os que cada usuário configurou
-    const signal = { id: crypto.randomUUID(), ...pair, entry, stop, type, stopType, stopLimitOffsetPct, at: now.toISOString() };
-    const legs = eligible.map((c) => ({
-      id: crypto.randomUUID(),
-      signalId: signal.id,
-      signal,
-      clientId: c.id,
-      userId: c.userId,
-      userName: owners.get(c.userId).name,
-      clientName: c.label,
-      exchange: c.exchange,
-      market: c.market,
-      symbol: symbolFor(c, signal),
-      targets: c.targets || [],
-      status: 'pendente',
-      steps: [],
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + expireHours * 3600 * 1000).toISOString(),
-    }));
-    await monitor.addSignal(legs);
-    res.json({
-      signal,
-      legs: legs.map((l) => ({ id: l.id, userName: l.userName, clientName: l.clientName, status: l.status, error: l.error })),
-    });
-  } finally {
-    sending = false;
-  }
+  const { signal, legs } = await signals.submit(req.body);
+  res.json({
+    signal,
+    legs: legs.map((l) => ({ id: l.id, userName: l.userName, clientName: l.clientName, status: l.status, error: l.error })),
+  });
 }));
+
+// Calls lidas do Telegram: aprovar (executar) ou descartar
+app.get('/api/admin/calls', requireAdmin, (req, res) => res.json({ telegram: telegram.getStatus(), calls: telegram.listCalls() }));
+app.post('/api/admin/calls/:id/execute', requireAdmin, wrap(async (req, res) => res.json(await telegram.executeCall(req.params.id))));
+app.post('/api/admin/calls/:id/discard', requireAdmin, (req, res) => res.json(telegram.discardCall(req.params.id)));
 
 app.get('/api/admin/legs', requireAdmin, (req, res) => res.json(monitor.list(300)));
 
@@ -349,6 +298,7 @@ const port = Number(process.env.PORT || 3000);
 app.listen(port, () => {
   console.log(`Painel em http://localhost:${port}`);
   monitor.start();
+  telegram.start();
 });
 
 module.exports = app;

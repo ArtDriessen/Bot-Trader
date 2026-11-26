@@ -29,6 +29,50 @@
     $('users').replaceChildren(list.length ? t : h('div', { class: 'mut', text: 'Nenhum usuário cadastrado ainda.' }));
   }
 
+  const CALL_LABEL = { aguardando: 'aguardando aprovação', executando: 'executando...', executada: 'executada', descartada: 'descartada', ignorada: 'ignorada', erro: 'erro' };
+  const CALL_CLS = { aguardando: 'warn', executando: 'warn', executada: 'ok', descartada: 'mut', ignorada: 'mut', erro: 'bad' };
+
+  async function loadCalls() {
+    const { telegram: tg, calls } = await adm('/api/admin/calls');
+    const st = $('tgStatus');
+    if (!tg.enabled) {
+      st.className = 'small-text warn';
+      st.textContent = 'Leitura do Telegram desativada. Defina TELEGRAM_BOT_TOKEN no servidor para ler as calls do seu canal.';
+    } else if (!tg.chatConfigured) {
+      st.className = 'small-text warn';
+      st.textContent = 'Bot conectado, mas falta definir TELEGRAM_CHAT_ID. Poste uma mensagem no canal e copie o id que aparece abaixo como "ignorada".';
+    } else {
+      st.className = `small-text ${tg.connected ? 'ok' : 'bad'}`;
+      st.textContent = `${tg.connected ? 'Conectado' : `Sem conexão${tg.lastError ? ` (${tg.lastError})` : ''}`}. Modo: ${tg.auto ? 'AUTOMÁTICO (executa sozinho)' : 'com aprovação (você clica em Executar)'}. Mensagens com mais de ${tg.maxAgeMin} min são ignoradas.`;
+    }
+    const t = h('table', null, h('tr', null, ['Recebida', 'Mensagem', 'Entendido', 'Status', ''].map((x) => h('th', { text: x }))));
+    calls.slice(0, 30).forEach((c) => {
+      const p = c.parsed;
+      const understood = p ? `${p.pair} | ${({ auto: 'automático', market: 'mercado', limit: 'limite', breakout: 'rompimento', dip: 'fundo' })[p.type]} | entrada ${p.entry} | stop ${p.stop}` : (c.reason || '');
+      const acts = h('div', { class: 'row' });
+      if (c.status === 'aguardando') {
+        acts.append(
+          h('button', { class: 'small auto', text: 'Executar', onclick: async () => {
+            if (!confirm(`Executar para todas as contas ativas?\n\n${understood}\n\nMensagem: ${c.text}`)) return;
+            try { await adm(`/api/admin/calls/${c.id}/execute`, { method: 'POST' }); } catch (e) { alert(e.message); }
+            loadCalls(); loadLegs().catch(() => {});
+          } }),
+          h('button', { class: 'ghost small auto', text: 'Descartar', onclick: async () => {
+            try { await adm(`/api/admin/calls/${c.id}/discard`, { method: 'POST' }); } catch (e) { alert(e.message); }
+            loadCalls();
+          } }));
+      }
+      const statusText = (CALL_LABEL[c.status] || c.status) + (c.status === 'executada' && c.result ? ` (${c.result.contas} conta(s)${c.result.erros ? `, ${c.result.erros} com erro` : ''})` : '') + (c.status === 'ignorada' || c.status === 'erro' ? `: ${c.reason || ''}` : '');
+      t.append(h('tr', null,
+        h('td', { text: fmtDate(c.at || c.receivedAt) }),
+        h('td', { text: c.text ? c.text : `Chat: ${c.chat?.title || ''} (id ${c.chat?.id})`, style: 'white-space:pre-wrap;max-width:320px' }),
+        h('td', { text: c.status === 'ignorada' ? '' : understood }),
+        h('td', { class: CALL_CLS[c.status] || '', text: statusText }),
+        h('td', null, acts)));
+    });
+    $('calls').replaceChildren(calls.length ? t : h('div', { class: 'mut', text: 'Nenhuma call recebida ainda.' }));
+  }
+
   async function loadLegs() {
     renderOperations($('ops'), await adm('/api/admin/legs'), {
       admin: true,
@@ -52,8 +96,9 @@
     $('login').hidden = true;
     $('app').hidden = false;
     await loadLegs().catch(() => {});
+    await loadCalls().catch(() => {});
     clearInterval(timer);
-    timer = setInterval(() => { loadLegs().catch(() => {}); loadUsers().catch(() => {}); }, 5000);
+    timer = setInterval(() => { loadLegs().catch(() => {}); loadUsers().catch(() => {}); loadCalls().catch(() => {}); }, 5000);
   }
 
   $('loginForm').addEventListener('submit', (e) => {

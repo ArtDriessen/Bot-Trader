@@ -106,4 +106,27 @@ const px = (v) => Number(v.toFixed(2));
   assert.equal(leg.status, 'concluida');
   assert.equal(fake.orders.filter((o) => o.side === 'sell' && o.type === 'market' && !o.params.stopLossPrice).length, 1);
   console.log('J) venda total em um alvo: ok');
+
+  // J) Entrada automática: compra agora se está no preço; senão monitora subir/cair
+  fake = holder.current = new Fake(100); c = client('spot');
+  leg = mkLeg({ type: 'auto', entry: 100.2, stop: 95 }); await startLeg(leg, c);
+  assert.ok(['ativa', 'concluida'].includes(leg.status) && fake.orders[0].side === 'buy', 'dentro de 0,5%: compra a mercado na hora');
+  fake = holder.current = new Fake(100);
+  leg = mkLeg({ type: 'auto', entry: 103, stop: 95 }); await startLeg(leg, c);
+  assert.equal(leg.status, 'monitorando'); assert.equal(leg.triggerDir, 'up'); assert.equal(fake.orders.length, 0);
+  fake.price = 102; await tick(leg, c); assert.equal(fake.orders.length, 0);
+  fake.price = 103.1; await tick(leg, c); assert.equal(fake.orders[0].side, 'buy', 'rompimento: compra ao subir até a entrada');
+  fake = holder.current = new Fake(100);
+  leg = mkLeg({ type: 'auto', entry: 97, stop: 94 }); await startLeg(leg, c);
+  assert.equal(leg.status, 'monitorando'); assert.equal(leg.triggerDir, 'down');
+  fake.price = 96.9; await tick(leg, c); assert.equal(fake.orders[0].side, 'buy', 'fundo: compra ao cair até a entrada');
+  console.log('K) entrada automática (agora / rompimento / fundo): ok');
+
+  // K) Entrada muito distante do preço atual (erro de digitação/formato) é recusada
+  fake = holder.current = new Fake(95000);
+  leg = mkLeg({ type: 'auto', entry: 95, stop: 93.5 }); await startLeg(leg, c);
+  assert.equal(leg.status, 'erro'); assert.match(leg.error, /longe do preço atual/); assert.equal(fake.orders.length, 0);
+  leg = mkLeg({ type: 'limit', entry: 50000, stop: 49000 }); await startLeg(leg, c);
+  assert.equal(leg.status, 'erro'); assert.equal(fake.orders.length, 0);
+  console.log('L) entrada muito distante do preço é recusada: ok');
 })().catch((e) => { console.error('FALHOU:', e); process.exit(1); });

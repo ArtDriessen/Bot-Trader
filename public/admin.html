@@ -30,6 +30,7 @@
           <label>Par<input id="pair" type="text" placeholder="BTC/USDT" required></label>
           <label>Tipo de entrada
             <select id="type">
+              <option value="auto">Automático (compra agora se estiver no preço; senão monitora)</option>
               <option value="market">A mercado (agora)</option>
               <option value="limit">Ordem limite</option>
               <option value="breakout">Rompimento (monitora subir)</option>
@@ -53,6 +54,12 @@
         </div>
         <div class="msg" id="msg"></div>
       </form>
+    </section>
+
+    <section class="card">
+      <h2>Calls do Telegram</h2>
+      <div id="tgStatus" class="small-text mut" style="margin-bottom:10px"></div>
+      <div id="calls" class="scroll"></div>
     </section>
 
     <section class="card">

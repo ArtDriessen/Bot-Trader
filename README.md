@@ -18,6 +18,7 @@ O **aviso de que o gerenciamento é por conta de cada usuário e de que não nos
 
 | Tipo de entrada | Comportamento |
 |---|---|
+| Automático (padrão das calls do Telegram) | Se o preço já está na entrada (até `MAX_SLIPPAGE_PCT`), compra na hora; senão monitora: preço abaixo da entrada = espera **subir** (rompimento); acima = espera **cair** (fundo). |
 | A mercado | Compra na hora (recusa se o preço estiver mais de `MAX_SLIPPAGE_PCT` longe da entrada). |
 | Ordem limite | Ordem limite de compra na corretora; stop e alvos entram quando ela executa. |
 | Rompimento | Entrada acima do preço atual: o robô monitora e só compra quando o preço **subir** até a entrada. |
@@ -32,6 +33,33 @@ No rompimento e no fundo, se o preço tocar o stop antes da entrada o sinal é c
 - Mudanças valem para as **próximas** operações; as já abertas mantêm os alvos de quando entraram.
 
 **Alvos na corretora:** em futuros viram ordens limite *reduce-only*. No spot, stop e alvo disputariam o mesmo saldo, então o robô monitora o preço, vende a parte do alvo a mercado e reposiciona o stop para o restante.
+
+## Leitura das calls do Telegram
+
+O robô lê as calls postadas no seu **canal do Telegram** por um bot (sem programas extras).
+
+1. No Telegram, fale com **@BotFather**, envie `/newbot` e guarde o **token**.
+2. Adicione o bot como **administrador** do seu canal.
+3. Defina `TELEGRAM_BOT_TOKEN` no servidor, poste uma mensagem no canal e abra `/admin`: o **id do canal** aparece em "Calls do Telegram" (como "ignorada: TELEGRAM_CHAT_ID ainda não definido"). Defina `TELEGRAM_CHAT_ID` com esse valor.
+4. Cada call postada vira uma linha no painel **aguardando aprovação**; você confere e clica em **Executar** (ou **Descartar**). Quando confiar na leitura, defina `TELEGRAM_AUTO_EXECUTE=true` para executar sozinho.
+
+**Formato que o robô entende** (maiúsculas, emojis e vírgula ou ponto decimal não importam):
+
+```
+Compra BTC/USDT
+Entrada: 100
+Stop: 95
+```
+
+Também entende `#BTCUSDT`, `ETH-USDT`, `SL`, `Stop Loss`, `Entry`, e palavras de tipo: *rompimento*, *fundo*, *limite*, *a mercado* (sem palavra de tipo = automático). Os alvos escritos na call são ignorados: quem define os alvos é cada usuário. **Prefira valores sem separador de milhar** (`95000`, não `95.000`).
+
+**Segurança da leitura**
+- Só lê o chat de `TELEGRAM_CHAT_ID`; mensagens de outros chats só têm o id/nome registrados (nunca o conteúdo).
+- Em grupos, só aceita quem estiver em `TELEGRAM_ALLOWED_USER_IDS`.
+- Na dúvida, **não executa** e mostra no painel o motivo: faixa de entrada (`100-102`), mais de um par, mensagem de resultado ("alvo batido", "stop atingido"), venda/short, stop maior que a entrada, stop a mais de 50% da entrada.
+- Ignora respostas, mensagens encaminhadas, mensagens com mais de `TELEGRAM_MAX_AGE_MIN` minutos e mensagens repetidas (o offset do Telegram é salvo em disco, então reiniciar o servidor não reexecuta nada).
+- Entradas a mais de `MAX_ENTRY_DISTANCE_PCT` do preço atual são recusadas (erro de digitação ou de formato de número).
+- Use um bot **só para isso**: dois programas lendo o mesmo bot ao mesmo tempo se atrapalham.
 
 ## Segurança
 
@@ -58,7 +86,7 @@ Em hospedagem, defina as mesmas variáveis no painel e use `DATA_DIR` apontando 
 
 ## Testes
 
-`npm test` roda os testes com uma corretora simulada (fundo, rompimento, limite, stop-limit, alvos parciais/totais, falha de stop, % da banca) e a API (cadastro, sessão, isolamento entre usuários, validações de 0–100% e 1–40%, chaves criptografadas, fluxo da call até as ordens).
+`npm test` roda os testes do interpretador de calls, da leitura do Telegram (API simulada) e do restante com uma corretora simulada (fundo, rompimento, limite, stop-limit, alvos parciais/totais, falha de stop, % da banca) e a API (cadastro, sessão, isolamento entre usuários, validações de 0–100% e 1–40%, chaves criptografadas, fluxo da call até as ordens).
 
 ## Antes de usar com dinheiro real
 

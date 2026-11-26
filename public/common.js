@@ -60,7 +60,7 @@
   };
   const statusClass = (st) =>
     ['concluida', 'ativa'].includes(st) ? 'ok' : ['monitorando', 'ordem_aberta', 'cancelada', 'pendente'].includes(st) ? 'warn' : 'bad';
-  const TYPE = { market: 'mercado', limit: 'limite', breakout: 'rompimento', dip: 'fundo' };
+  const TYPE = { auto: 'automático', market: 'mercado', limit: 'limite', breakout: 'rompimento', dip: 'fundo' };
   const PENDING = ['monitorando', 'ordem_aberta'];
 
   const fmtDate = (iso) => new Date(iso).toLocaleString('pt-BR');
