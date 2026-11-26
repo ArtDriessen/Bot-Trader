@@ -34,6 +34,13 @@ ok('BTC/USDT entrada a mercado: 100 stop: 95', { pair: 'BTC/USDT', entry: 100, s
 ok('BTC/USDT ordem limite\nEntrada 100\nStop 95', { pair: 'BTC/USDT', entry: 100, stop: 95, type: 'limit' });
 ok('BTC/USDT\nEntrada: $100\nStop: $95\nAlvos: 105 / 110 / 120', { pair: 'BTC/USDT', entry: 100, stop: 95, type: 'auto' });
 
+// formatação de Discord/Markdown (calls replicadas)
+ok('**Compra BTC/USDT**\n**Entrada:** 100\n**Stop Loss:** 95', { pair: 'BTC/USDT', entry: 100, stop: 95, type: 'auto' });
+ok('<@&123456789> :rocket: **COMPRA ETH/USDT**\nEntrada: **3250**\nStop: **3100**', { pair: 'ETH/USDT', entry: 3250, stop: 3100, type: 'auto' });
+ok('@everyone\n> BTC/USDT\n> Entrada: `100`\n> SL: `95`', { pair: 'BTC/USDT', entry: 100, stop: 95, type: 'auto' });
+ok('||BTC/USDT entrada 100 stop 95||', { pair: 'BTC/USDT', entry: 100, stop: 95, type: 'auto' });
+ok('__Compra__ <:ouro:98765432> SOL/USDT\nEntrada 150\nStop 140\nAlvos: 160 / 170', { pair: 'SOL/USDT', entry: 150, stop: 140, type: 'auto' });
+
 // NUNCA devem virar ordem
 no('BTC/USDT entrada 100 stop 20', /muito distante/);
 no('BTC/USDT entrada 100 stop 95 ✅ alvo 1 batido, gain de 5%', /resultado/);

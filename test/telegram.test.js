@@ -131,6 +131,15 @@ const byText = async (frag) => (await calls()).calls.find((c) => c.text && c.tex
   assert.equal(auto.result.contas, 1); assert.ok(fake.orders.length > before);
   console.log('7) modo automático executa sozinho: ok');
 
+  // 7b) call repetida pelo replicador e call com imagem (texto em 'caption')
+  post('Compra BTC/USDT\nEntrada: 100\nStop: 96\nrepost');
+  await waitFor(async () => (await calls()).calls.find((c) => /repetida/.test(c.reason || '')), 'repetida');
+  assert.equal((await calls()).calls.filter((c) => c.parsed && c.parsed.stop === 96).length, 1, 'a repetida não gera segunda ordem');
+  updates.push({ update_id: nextId++, channel_post: { message_id: msgId++, date: now(), chat: { id: Number(CHAT), title: 'Canal', type: 'channel' }, photo: [{ file_id: 'x' }], caption: '**COMPRA** BNB/USDT\n**Entrada:** 100\n**Stop:** 94' } });
+  const cap = await waitFor(async () => (await calls()).calls.find((c) => c.parsed && c.parsed.pair === 'BNB/USDT'), 'call com legenda');
+  assert.deepEqual(cap.parsed, { pair: 'BNB/USDT', entry: 100, stop: 94, type: 'auto' });
+  console.log('7b) call repetida ignorada e call com imagem (legenda) lida: ok');
+
   // 8) offset persistido (não repete mensagens após reinício)
   const st = JSON.parse(fs.readFileSync(path.join(DATA, 'telegram.json'), 'utf8'));
   assert.equal(st.offset, nextId, 'offset aponta para depois da última atualização');

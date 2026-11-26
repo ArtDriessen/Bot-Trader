@@ -53,11 +53,13 @@ Stop: 95
 
 Também entende `#BTCUSDT`, `ETH-USDT`, `SL`, `Stop Loss`, `Entry`, e palavras de tipo: *rompimento*, *fundo*, *limite*, *a mercado* (sem palavra de tipo = automático). Os alvos escritos na call são ignorados: quem define os alvos é cada usuário. **Prefira valores sem separador de milhar** (`95000`, não `95.000`).
 
+**Se as calls já são replicadas do Discord por outro bot:** funciona do mesmo jeito, porque o robô lê o canal. Crie um **segundo bot só para a leitura** no @BotFather (não reaproveite o token do bot que replica) e adicione-o como administrador do canal. O robô entende a formatação do Discord (`**negrito**`, menções, emojis, citações) e calls com imagem (o texto vem na legenda). Limitações: mensagens **editadas** depois de postadas são ignoradas, e uma call dividida em várias mensagens não é montada.
+
 **Segurança da leitura**
 - Só lê o chat de `TELEGRAM_CHAT_ID`; mensagens de outros chats só têm o id/nome registrados (nunca o conteúdo).
 - Em grupos, só aceita quem estiver em `TELEGRAM_ALLOWED_USER_IDS`.
 - Na dúvida, **não executa** e mostra no painel o motivo: faixa de entrada (`100-102`), mais de um par, mensagem de resultado ("alvo batido", "stop atingido"), venda/short, stop maior que a entrada, stop a mais de 50% da entrada.
-- Ignora respostas, mensagens encaminhadas, mensagens com mais de `TELEGRAM_MAX_AGE_MIN` minutos e mensagens repetidas (o offset do Telegram é salvo em disco, então reiniciar o servidor não reexecuta nada).
+- Ignora respostas, mensagens encaminhadas, mensagens com mais de `TELEGRAM_MAX_AGE_MIN` minutos, mensagens repetidas e a mesma call (par, entrada e stop) repostada em até `TELEGRAM_DEDUPE_MIN` minutos (o offset do Telegram é salvo em disco, então reiniciar o servidor não reexecuta nada).
 - Entradas a mais de `MAX_ENTRY_DISTANCE_PCT` do preço atual são recusadas (erro de digitação ou de formato de número).
 - Use um bot **só para isso**: dois programas lendo o mesmo bot ao mesmo tempo se atrapalham.
 
